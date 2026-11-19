@@ -1,0 +1,10 @@
+# 构建产物
+*.app
+*.zip
+*.iconset/
+build/
+
+# 临时文件
+*.log
+.DS_Store
+icon_raw.png
