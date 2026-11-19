@@ -2,7 +2,7 @@
 
 Turn your Mac trackpad into a pen. Tap the trackpad with a gesture — and the left mouse button stays "pressed" until you tap again, so you can draw on the trackpad without pressing it down.
 
-**中文文档：[README.zh-CN.md](README.zh-CN.md)**
+**中文文档：[README.zh-CN.md](README.zh-CN.md)** · **Download：[latest release](https://github.com/Xian2001/finger-drawing/releases/latest)**
 
 > A tiny menu-bar app for macOS. No window, no dock icon — just a pencil in the menu bar.
 
@@ -62,7 +62,7 @@ The menu items are written in Chinese (the app's primary audience); the pencil i
 
 ```bash
 xcode-select --install                 # Swift toolchain, once
-git clone https://github.com/<you>/finger-drawing.git
+git clone https://github.com/Xian2001/finger-drawing.git
 cd finger-drawing
 bash build.sh                          # produces "Finger Drawing.app"
 ```
@@ -104,17 +104,19 @@ Check that drawing mode is still on (the pencil shows `开`); click once so the 
 - Gesture recognition is heuristic — no sensitivity slider (yet). Patch `Tune` if it feels too eager or too slow.
 
 
-## Publishing to GitHub
+## Releases
+
+- Latest build: **[v1.0.0 — FingerDrawing-1.0.0.zip](https://github.com/Xian2001/finger-drawing/releases/latest)** (Apple Silicon, macOS 12+).
+- The repository holds the source; the prebuilt `.app` and its zip live in the release assets (they are `.gitignore`d on purpose).
+
+To cut a new release:
 
 ```bash
-git init -b main
-git add .
-git commit -m "Finger Drawing 1.0.0"
-git remote add origin git@github.com:<you>/finger-drawing.git
-git push -u origin main
+# 1. bump CFBundleShortVersionString / CFBundleVersion in src/Info.plist
+bash build.sh                                          # rebuild the .app
+ditto -c -k --keepParent "Finger Drawing.app" "FingerDrawing-x.y.z.zip"
+# 2. publish tag vx.y.z and attach the zip as a release asset
 ```
-
-Then create a **Release** on GitHub, tag it `v1.0.0`, and upload `FingerDrawing-1.0.0.zip` as the release asset. Suggested repo description: *“Turn your Mac trackpad into a pen — tap to hold the left mouse button.”* Suggested topics: `macos`, `menu-bar`, `menubar-app`, `trackpad`, `drawing`, `swift`.
 
 ## License
 

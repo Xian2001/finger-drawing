@@ -2,7 +2,7 @@
 
 把 Mac 触控板当成画笔：做一次手势 → 鼠标左键就一直处于按下状态，之后手指在触控板上滑动就能连续画线，**不用真的按住触控板**。再同一次手势 → 松开。
 
-**English documentation: [README.md](README.md)**
+**English documentation: [README.md](README.md)** · **下载：[最新版本](https://github.com/Xian2001/finger-drawing/releases/latest)**
 
 > 一个 mac 菜单栏小工具，没有窗口、不占 Dock，只在菜单栏放一个小铅笔。
 
@@ -62,7 +62,7 @@
 
 ```bash
 xcode-select --install                 # 只需一次，装 Swift 工具链
-git clone https://github.com/<you>/finger-drawing.git
+git clone https://github.com/Xian2001/finger-drawing.git
 cd finger-drawing
 bash build.sh                          # 生成「Finger Drawing.app」
 ```
@@ -104,18 +104,19 @@ macOS 26/27 会把新状态项排在应用菜单右侧，菜单栏排满时会�
 - 手势判定是启发式的，没有灵敏度滑块；觉得太灵敏/太迟钝可以直接改 `Tune`。
 
 
-## 发布到 GitHub
+## 下载与发布
+
+- 现成安装包：**[v1.0.0 — FingerDrawing-1.0.0.zip](https://github.com/Xian2001/finger-drawing/releases/latest)**（Apple Silicon，macOS 12+）。
+- 仓库里只放源码，编译好的 `.app` 和 zip 走 Release 附件（已被 `.gitignore` 排除）。
+
+发新版本时：
 
 ```bash
-git init -b main
-git add .
-git commit -m "Finger Drawing 1.0.0"
-git remote add origin git@github.com:<you>/finger-drawing.git
-git push -u origin main
+# 1. 在 src/Info.plist 里改 CFBundleShortVersionString / CFBundleVersion
+bash build.sh                                          # 重新生成 .app
+ditto -c -k --keepParent "Finger Drawing.app" "FingerDrawing-x.y.z.zip"
+# 2. 建 tag vx.y.z，把新 zip 作为 Release 附件上传
 ```
-
-然后在 GitHub 上新建 **Release**，标签 `v1.0.0`，把 `FingerDrawing-1.0.0.zip` 作为发布附件上传。
-仓库描述建议：*把 Mac 触控板变成画笔，轻点即按住左键*；Topics 建议：`macos`, `menu-bar`, `menubar-app`, `trackpad`, `drawing`, `swift`。
 
 ## 许可证
 
