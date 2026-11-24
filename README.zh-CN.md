@@ -120,7 +120,7 @@ macOS 26/27 会把新状态项排在应用菜单右侧，菜单栏排满时会�
 
 ## 下载与发布
 
-- 现成安装包：**[v1.1.0 — FingerDrawing-1.1.1.zip](https://github.com/Xian2001/finger-drawing/releases/latest)**（Apple Silicon，macOS 12+）。
+- 现成安装包：**[v1.1.1 — FingerDrawing-1.1.1.zip](https://github.com/Xian2001/finger-drawing/releases/latest)**（Apple Silicon，macOS 12+）。
 - 仓库里只放源码，编译好的 `.app` 和 zip 走 Release 附件（已被 `.gitignore` 排除）。
 
 发新版本时：

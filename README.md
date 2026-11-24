@@ -120,7 +120,7 @@ Check that drawing mode is still on (the pencil shows `开`); click once so the 
 
 ## Releases
 
-- Latest build: **[v1.1.0 — FingerDrawing-1.1.1.zip](https://github.com/Xian2001/finger-drawing/releases/latest)** (Apple Silicon, macOS 12+).
+- Latest build: **[v1.1.1 — FingerDrawing-1.1.1.zip](https://github.com/Xian2001/finger-drawing/releases/latest)** (Apple Silicon, macOS 12+).
 - The repository holds the source; the prebuilt `.app` and its zip live in the release assets (they are `.gitignore`d on purpose).
 
 To cut a new release:
