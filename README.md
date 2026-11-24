@@ -22,8 +22,15 @@ Turn your Mac trackpad into a pen. Tap the trackpad with a gesture — and the l
   | Four-finger tap | 4 | 1 |
 
 - **Master switch** in the menu bar: when unchecked, the app does nothing at all — the gesture is ignored and no mouse events are touched.
-- **State is remembered** — the master switch and the chosen gesture survive relaunches.
+- **Optional global keyboard shortcut** — pick any combo (⌘ / ⌥ / ⌃ / ⇧ + key) in the gesture submenu; it toggles drawing mode from any app, and it does not need the Accessibility permission to be registered.
+- **State is remembered** — the master switch, the chosen gesture and the keyboard shortcut survive relaunches.
 - **No accidental strokes** — a gesture only counts when it is a real tap: short (< 0.3 s), almost no movement, with the required number of fingers landing together (< 0.15 s apart). Pressing, holding or swiping never triggers it.
+
+### Keyboard shortcut
+
+Open the `触发手势` submenu → `键盘快捷键：未设置（点此设置）`. A small window appears: press the combo you want (it must include at least one of ⌘ / ⌥ / ⌃), then click **保存** (or press Return). Esc closes it without changing anything, and `清除快捷键` removes the assignment.
+
+The shortcut is registered through Carbon's `RegisterEventHotKey`, so it works while another app is focused, the key press is swallowed instead of leaking into the focused app, and it needs no Accessibility permission. If macOS or another app already owns the combo, the app tells you and keeps the previous one.
 
 ## Menu bar
 
@@ -31,6 +38,10 @@ Turn your Mac trackpad into a pen. Tap the trackpad with a gesture — and the l
 ✓ 启用 Finger Drawing          ← master switch
     开启画笔模式 / 关闭画笔模式    ← manual toggle
     触发手势：单指双击（默认）      ← gesture submenu
+        ├ 单指双击 / 单指三击 / 两指 / 三指 / 四指轻点
+        ├ ─────────────
+        ├ 键盘快捷键：⌃⌥P（点此修改）
+        └ 清除快捷键
   ─────────────────────
   重新连接触控板
   使用说明
@@ -106,7 +117,7 @@ Check that drawing mode is still on (the pencil shows `开`); click once so the 
 
 ## Releases
 
-- Latest build: **[v1.0.0 — FingerDrawing-1.0.0.zip](https://github.com/Xian2001/finger-drawing/releases/latest)** (Apple Silicon, macOS 12+).
+- Latest build: **[v1.1.0 — FingerDrawing-1.1.0.zip](https://github.com/Xian2001/finger-drawing/releases/latest)** (Apple Silicon, macOS 12+).
 - The repository holds the source; the prebuilt `.app` and its zip live in the release assets (they are `.gitignore`d on purpose).
 
 To cut a new release:

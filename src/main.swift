@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 
 // MARK: - 常量
@@ -537,6 +538,315 @@ final class HUD {
     }
 }
 
+// MARK: - 键盘快捷键
+
+/// 一个全局快捷键组合：键码 + Carbon 修饰键
+struct HotkeyCombo {
+    var keyCode: UInt32
+    var carbonModifiers: UInt32
+    var keyLabel: String
+
+    /// 按 ⌃⌥⇧⌘ 的固定顺序排列修饰符符号
+    var modifierSymbols: String {
+        var s = ""
+        if carbonModifiers & UInt32(controlKey) != 0 { s += "⌃" }
+        if carbonModifiers & UInt32(optionKey) != 0 { s += "⌥" }
+        if carbonModifiers & UInt32(shiftKey) != 0 { s += "⇧" }
+        if carbonModifiers & UInt32(cmdKey) != 0 { s += "⌘" }
+        return s
+    }
+
+    var display: String { modifierSymbols + keyLabel }
+}
+
+/// NSEvent 修饰键 → Carbon 修饰键
+func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
+    var m: UInt32 = 0
+    if flags.contains(.control) { m |= UInt32(controlKey) }
+    if flags.contains(.option) { m |= UInt32(optionKey) }
+    if flags.contains(.shift) { m |= UInt32(shiftKey) }
+    if flags.contains(.command) { m |= UInt32(cmdKey) }
+    return m
+}
+
+/// 把按键转成可读标签
+func keyLabel(for event: NSEvent) -> String {
+    switch event.keyCode {
+    case 36: return "↩"
+    case 48: return "⇥"
+    case 49: return "Space"
+    case 51: return "⌫"
+    case 117: return "⌦"
+    case 123: return "←"
+    case 124: return "→"
+    case 125: return "↓"
+    case 126: return "↑"
+    case 115: return "Home"
+    case 119: return "End"
+    case 116: return "⇞"
+    case 121: return "⇟"
+    case 122: return "F1"
+    case 120: return "F2"
+    case 99: return "F3"
+    case 118: return "F4"
+    case 96: return "F5"
+    case 97: return "F6"
+    case 98: return "F7"
+    case 100: return "F8"
+    case 101: return "F9"
+    case 109: return "F10"
+    case 103: return "F11"
+    case 111: return "F12"
+    default:
+        if let chars = event.charactersIgnoringModifiers, let first = chars.first,
+           first.isLetter || first.isNumber || first.isPunctuation || first.isSymbol {
+            return String(first).uppercased()
+        }
+        return "键码 \(event.keyCode)"
+    }
+}
+
+/// Carbon 全局快捷键：不需要辅助功能权限，也不会把按键漏给前台应用
+private func hotkeyEventHandler(_ callRef: EventHandlerCallRef?,
+                                _ event: EventRef?,
+                                _ userData: UnsafeMutableRawPointer?) -> OSStatus {
+    HotkeyManager.shared.fire()
+    return noErr
+}
+
+final class HotkeyManager {
+    static let shared = HotkeyManager()
+
+    /// 快捷键被按下时的回调
+    var onFire: (() -> Void)?
+    private(set) var combo: HotkeyCombo?
+
+    private var hotKeyRef: EventHotKeyRef?
+    private var handlerRef: EventHandlerRef?
+    private let hotKeyID = EventHotKeyID(signature: OSType(0x46445257), id: 1)  // 'FDRW'
+
+    private init() {
+        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
+                                 eventKind: UInt32(kEventHotKeyPressed))
+        InstallEventHandler(GetApplicationEventTarget(), hotkeyEventHandler, 1, &spec, nil, &handlerRef)
+    }
+
+    @discardableResult
+    func register(_ combo: HotkeyCombo) -> Bool {
+        unregister()
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(combo.keyCode, combo.carbonModifiers, hotKeyID,
+                                         GetApplicationEventTarget(), 0, &ref)
+        guard status == noErr, ref != nil else {
+            AppLog.shared.log("快捷键注册失败 status=\(status) combo=\(combo.display)")
+            return false
+        }
+        hotKeyRef = ref
+        self.combo = combo
+        AppLog.shared.log("快捷键已注册：\(combo.display)")
+        return true
+    }
+
+    func unregister() {
+        if let ref = hotKeyRef { UnregisterEventHotKey(ref) }
+        hotKeyRef = nil
+        combo = nil
+    }
+
+    func fire() {
+        AppLog.shared.log("快捷键被按下")
+        onFire?()
+    }
+}
+
+/// 捕获按键的输入区域：必须带修饰键，Esc 取消
+final class HotkeyRecorderView: NSView {
+    var onCapture: ((HotkeyCombo) -> Void)?
+    var onCancel: (() -> Void)?
+    var text: String = "等待按键…" {
+        didSet { needsDisplay = true }
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.controlBackgroundColor.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 9, yRadius: 9).fill()
+        NSColor.separatorColor.setStroke()
+        let border = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 9, yRadius: 9)
+        border.lineWidth = 1
+        border.stroke()
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 20, weight: .medium),
+            .foregroundColor: NSColor.labelColor
+        ]
+        let size = text.size(withAttributes: attrs)
+        text.draw(at: NSPoint(x: (bounds.width - size.width) / 2,
+                              y: (bounds.height - size.height) / 2),
+                  withAttributes: attrs)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {        // Esc
+            onCancel?()
+            return
+        }
+        let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        guard !flags.isEmpty else {
+            NSSound.beep()
+            text = "需要至少一个 ⌘ / ⌥ / ⌃ 修饰键"
+            return
+        }
+        let combo = HotkeyCombo(keyCode: UInt32(event.keyCode),
+                                carbonModifiers: carbonModifiers(from: flags),
+                                keyLabel: keyLabel(for: event))
+        text = combo.display
+        onCapture?(combo)
+    }
+}
+
+/// 自定义快捷键的小窗口
+final class HotkeyRecorderWindow: NSWindow, NSWindowDelegate {
+    var onCommit: ((HotkeyCombo?) -> Void)?
+    /// 窗口被关掉时调用（用户按 Esc 或点窗口关闭按钮也算），用于恢复原来的快捷键
+    var onDismiss: (() -> Void)?
+    let recorderView = HotkeyRecorderView()
+
+    private var captured: HotkeyCombo?
+    private var saveButton: NSButton!
+    private var suppressDismiss = false
+    private var localMonitor: Any?
+    private var globalMonitor: Any?
+
+    init(current: HotkeyCombo?) {
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 470, height: 200),
+                   styleMask: [.titled, .closable],
+                   backing: .buffered,
+                   defer: false)
+        title = "自定义快捷键"
+        isReleasedWhenClosed = false
+        level = .modalPanel
+        delegate = self
+        buildUI(current: current)
+        center()
+        startMonitors()
+    }
+
+    private func buildUI(current: HotkeyCombo?) {
+        guard let content = contentView else { return }
+
+        let titleLabel = NSTextField(labelWithString: "按下一个组合键（至少含 ⌘ / ⌥ / ⌃ 之一）")
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.frame = NSRect(x: 22, y: 160, width: 420, height: 20)
+        content.addSubview(titleLabel)
+
+        recorderView.frame = NSRect(x: 22, y: 96, width: 426, height: 52)
+        recorderView.text = current?.display ?? "等待按键…"
+        recorderView.onCapture = { [weak self] combo in
+            self?.captured = combo
+            self?.saveButton.isEnabled = true
+        }
+        recorderView.onCancel = { [weak self] in self?.close() }
+        content.addSubview(recorderView)
+
+        let hint = NSTextField(labelWithString: "按下后点「保存」生效；Esc 取消；「清除」可删除已设置的快捷键")
+        hint.font = NSFont.systemFont(ofSize: 11)
+        hint.textColor = .secondaryLabelColor
+        hint.frame = NSRect(x: 22, y: 70, width: 426, height: 16)
+        content.addSubview(hint)
+
+        saveButton = NSButton(title: "保存", target: self, action: #selector(commitCombo))
+        saveButton.bezelStyle = .rounded
+        saveButton.keyEquivalent = "\r"
+        saveButton.frame = NSRect(x: 330, y: 20, width: 118, height: 30)
+        saveButton.isEnabled = false
+        content.addSubview(saveButton)
+
+        let clearButton = NSButton(title: "清除", target: self, action: #selector(clearCombo))
+        clearButton.bezelStyle = .rounded
+        clearButton.frame = NSRect(x: 230, y: 20, width: 90, height: 30)
+        content.addSubview(clearButton)
+
+        let cancelButton = NSButton(title: "取消", target: self, action: #selector(cancelCombo))
+        cancelButton.bezelStyle = .rounded
+        cancelButton.frame = NSRect(x: 140, y: 20, width: 84, height: 30)
+        content.addSubview(cancelButton)
+    }
+
+    override func makeKeyAndOrderFront(_ sender: Any?) {
+        super.makeKeyAndOrderFront(sender)
+        makeFirstResponder(recorderView)
+    }
+
+    @objc private func commitCombo() {
+        guard let combo = captured else { return }
+        let callback = onCommit
+        suppressDismiss = true
+        NSApp.stopModal()
+        close()
+        callback?(combo)
+    }
+
+    @objc private func clearCombo() {
+        let callback = onCommit
+        suppressDismiss = true
+        NSApp.stopModal()
+        close()
+        callback?(nil)
+    }
+
+    @objc private func cancelCombo() {
+        NSApp.stopModal()
+        close()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        stopMonitors()
+        if !suppressDismiss { onDismiss?() }
+    }
+
+    // 窗口不一定是 key window（菜单栏应用常常抢不到焦点），
+    // 所以同时挂本地和全局监听，保证按键一定能被录下来
+    private func startMonitors() {
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            guard let self = self else { return event }
+            return self.handle(event) ? nil : event
+        }
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            _ = self?.handle(event)
+        }
+    }
+
+    private func stopMonitors() {
+        if let m = localMonitor { NSEvent.removeMonitor(m) }
+        if let g = globalMonitor { NSEvent.removeMonitor(g) }
+        localMonitor = nil
+        globalMonitor = nil
+    }
+
+    @discardableResult
+    private func handle(_ event: NSEvent) -> Bool {
+        if event.keyCode == 53 {                 // Esc
+            cancelCombo()
+            return true
+        }
+        if event.keyCode == 36, captured != nil {  // Return = 保存
+            commitCombo()
+            return true
+        }
+        let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        guard !flags.isEmpty else { return false }
+        let combo = HotkeyCombo(keyCode: UInt32(event.keyCode),
+                                carbonModifiers: carbonModifiers(from: flags),
+                                keyLabel: keyLabel(for: event))
+        captured = combo
+        recorderView.text = combo.display
+        saveButton.isEnabled = true
+        return true
+    }
+}
+
 // MARK: - 应用
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -548,6 +858,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let drawMenuItem = NSMenuItem()
     private let permissionMenuItem = NSMenuItem()
     private let gestureMenuItem = NSMenuItem()
+    private let hotkeyMenuItem = NSMenuItem()
+    private let hotkeyClearItem = NSMenuItem()
+    private var hotkeyWindow: HotkeyRecorderWindow?
+    private var hotkeyBeforeEdit: HotkeyCombo?
+    private var hotkeyCommitted = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppLog.shared.log("———— 启动 ————")
@@ -582,6 +897,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         buildStatusItem()
+
+        // 如果之前设置过全局快捷键，启动时恢复
+        HotkeyManager.shared.onFire = { [weak self] in
+            guard let self = self, self.engine.isArmed else { return }
+            self.engine.toggle()
+        }
+        let savedKeyCode = UserDefaults.standard.object(forKey: "hotkeyKeyCode") as? Int ?? -1
+        if savedKeyCode >= 0 {
+            let savedModifiers = UserDefaults.standard.integer(forKey: "hotkeyModifiers")
+            let savedLabel = UserDefaults.standard.string(forKey: "hotkeyKeyLabel") ?? "?"
+            let combo = HotkeyCombo(keyCode: UInt32(savedKeyCode),
+                                    carbonModifiers: UInt32(savedModifiers),
+                                    keyLabel: savedLabel)
+            if !HotkeyManager.shared.register(combo) {
+                UserDefaults.standard.set(-1, forKey: "hotkeyKeyCode")
+            }
+            refreshUI()
+        }
 
         let touchOK = detector.start()
         if !touchOK {
@@ -675,7 +1008,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.state = (preset == detector.preset) ? .on : .off
             sub.addItem(item)
         }
+
+        // 除了触控板手势，也可以用一个键盘快捷键来开/关画笔模式
+        sub.addItem(.separator())
+
+        hotkeyMenuItem.target = self
+        hotkeyMenuItem.action = #selector(openHotkeyRecorder)
+        sub.addItem(hotkeyMenuItem)
+
+        hotkeyClearItem.title = "清除快捷键"
+        hotkeyClearItem.target = self
+        hotkeyClearItem.action = #selector(clearHotkey)
+        sub.addItem(hotkeyClearItem)
+
         return sub
+    }
+
+    /// 写入/清除全局快捷键，并同步到 UserDefaults
+    private func applyHotkey(_ combo: HotkeyCombo?) {
+        if let combo = combo {
+            guard HotkeyManager.shared.register(combo) else {
+                NSSound.beep()
+                showHotkeyConflict(combo)
+                if let previous = hotkeyBeforeEdit { HotkeyManager.shared.register(previous) }
+                refreshUI()
+                return
+            }
+            UserDefaults.standard.set(Int(combo.keyCode), forKey: "hotkeyKeyCode")
+            UserDefaults.standard.set(Int(combo.carbonModifiers), forKey: "hotkeyModifiers")
+            UserDefaults.standard.set(combo.keyLabel, forKey: "hotkeyKeyLabel")
+            AppLog.shared.log("快捷键已设置：\(combo.display)")
+            HUD.shared.flash("快捷键：\(combo.display)")
+        } else {
+            HotkeyManager.shared.unregister()
+            UserDefaults.standard.set(-1, forKey: "hotkeyKeyCode")
+            AppLog.shared.log("快捷键已清除")
+            HUD.shared.flash("快捷键已清除")
+        }
+        refreshUI()
+    }
+
+    private func showHotkeyConflict(_ combo: HotkeyCombo) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "这个快捷键被占用了"
+        alert.informativeText = "系统或其他应用已经占用了 \(combo.display)，换一个组合键试试（比如 ⌥⌘P、⌃⌥D）。"
+        alert.addButton(withTitle: "好")
+        alert.runModal()
+    }
+
+    @objc private func openHotkeyRecorder() {
+        NSApp.activate(ignoringOtherApps: true)
+        hotkeyWindow?.close()
+
+        // 先把旧快捷键摘掉，否则按下旧组合键会被全局热键截走，窗口收不到按键
+        hotkeyBeforeEdit = HotkeyManager.shared.combo
+        hotkeyCommitted = false
+        HotkeyManager.shared.unregister()
+        refreshUI()
+
+        let window = HotkeyRecorderWindow(current: hotkeyBeforeEdit)
+        window.onCommit = { [weak self] combo in
+            guard let self = self else { return }
+            self.hotkeyCommitted = true
+            self.applyHotkey(combo)
+        }
+        window.onDismiss = { [weak self] in
+            guard let self = self else { return }
+            // 没保存就关掉了：把原来的快捷键接回去
+            if !self.hotkeyCommitted, let previous = self.hotkeyBeforeEdit {
+                HotkeyManager.shared.register(previous)
+            }
+            self.refreshUI()
+        }
+        hotkeyWindow = window
+        NSApp.setActivationPolicy(.regular)   // 临时变成普通应用，确保窗口能真正到前台并拿到按键
+        NSApp.activate(ignoringOtherApps: true)
+        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(window.recorderView)
+        NSApp.runModal(for: window)          // 模态跑起来，窗口才会稳定拿到按键
+        window.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
+        hotkeyWindow = nil
+        hotkeyBeforeEdit = nil
+    }
+
+    @objc private func clearHotkey() {
+        applyHotkey(nil)
     }
 
     @objc private func selectGesture(_ sender: NSMenuItem) {
@@ -753,6 +1173,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         drawMenuItem.isEnabled = armed
         gestureMenuItem.title = "触发手势：\(detector.preset.title)"
 
+        if let combo = HotkeyManager.shared.combo {
+            hotkeyMenuItem.title = "键盘快捷键：\(combo.display)（点此修改）"
+            hotkeyClearItem.isEnabled = true
+        } else {
+            hotkeyMenuItem.title = "键盘快捷键：未设置（点此设置）"
+            hotkeyClearItem.isEnabled = false
+        }
+        hotkeyMenuItem.isEnabled = armed
+
         statusItem.button?.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: "Finger Drawing")
         statusItem.button?.image?.isTemplate = true
         statusItem.button?.imagePosition = .imageLeading
@@ -822,10 +1251,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         1. 「触发手势」可以换成你习惯的方式：单指双击（默认）、单指三击、
            两指轻点、三指轻点、四指轻点。选中后会记住，下次启动沿用。
 
-        2. 做出该手势 → 开启「画笔模式」，屏幕顶部会有提示。
+           同一个子菜单里还有「键盘快捷键」：点一下会弹出一个小窗口，
+           在该窗口里按下你想用的组合键（至少含 ⌘ / ⌥ / ⌃ 之一），
+           点「保存」后立即生效并记住；之后在任何应用里按这个组合键
+           都能开关画笔模式。「清除快捷键」可以把它删掉。
+
+        2. 做出该手势，或按下已设置的快捷键 → 开启「画笔模式」，屏幕顶部会有提示。
         3. 开启后手指在触控板上滑动即可连续画线，不需要按住触控板；
            此时鼠标等价于一直按下，备忘录、预览标记、Sketch、PS 等都能画。
-        4. 再做出一次同样的手势 → 关闭画笔模式。
+        4. 再做出一次同样的手势（或再按一次快捷键）→ 关闭画笔模式。
 
         小提示：
         · 必须是「轻点」：手指落下再抬起，不移动；用力按下、按住、滑动都不算。
