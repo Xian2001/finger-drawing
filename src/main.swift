@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
+import Darwin
 
 // MARK: - 常量
 
@@ -538,6 +539,28 @@ final class HUD {
     }
 }
 
+// MARK: - 单实例
+
+enum SingleInstance {
+    private static var fd: Int32 = -1
+
+    /// 拿不到锁说明已经有一份在跑
+    static func acquire() -> Bool {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Finger Drawing", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let path = dir.appendingPathComponent("instance.lock").path
+        fd = open(path, O_CREAT | O_RDWR, 0o600)
+        guard fd >= 0 else { return true }      // 打不开锁文件就别拦着用户
+        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            close(fd)
+            fd = -1
+            return false
+        }
+        return true
+    }
+}
+
 // MARK: - 键盘快捷键
 
 /// 一个全局快捷键组合：键码 + Carbon 修饰键
@@ -867,6 +890,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppLog.shared.log("———— 启动 ————")
+
+        // 同一个应用只允许一个实例：否则桌面副本、下载副本各开一份，会有多个菜单栏图标、
+        // 互相抢快捷键，看起来就像“图标不见了”。用文件锁判断，跨路径启动也可靠
+        if !SingleInstance.acquire() {
+            AppLog.shared.log("已有实例在运行，本实例退出")
+            NSApp.terminate(nil)
+            return
+        }
 
         NSApp.setActivationPolicy(.accessory)
 

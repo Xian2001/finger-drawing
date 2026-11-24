@@ -24,6 +24,7 @@ Turn your Mac trackpad into a pen. Tap the trackpad with a gesture — and the l
 - **Master switch** in the menu bar: when unchecked, the app does nothing at all — the gesture is ignored and no mouse events are touched.
 - **Optional global keyboard shortcut** — pick any combo (⌘ / ⌥ / ⌃ / ⇧ + key) in the gesture submenu; it toggles drawing mode from any app, and it does not need the Accessibility permission to be registered. **The trackpad gesture and the keyboard shortcut are mutually exclusive:** registering a shortcut switches the trackpad gesture off, and choosing a gesture again clears the shortcut.
 - **State is remembered** — the master switch, the chosen gesture and the keyboard shortcut survive relaunches.
+- **One instance only** — if a second copy is launched (desktop copy, unzipped download…), it exits immediately, so you never end up with duplicate menu-bar icons fighting over the same shortcut.
 - **No accidental strokes** — a gesture only counts when it is a real tap: short (< 0.3 s), almost no movement, with the required number of fingers landing together (< 0.15 s apart). Pressing, holding or swiping never triggers it.
 
 ### Keyboard shortcut
@@ -119,7 +120,7 @@ Check that drawing mode is still on (the pencil shows `开`); click once so the 
 
 ## Releases
 
-- Latest build: **[v1.1.0 — FingerDrawing-1.1.0.zip](https://github.com/Xian2001/finger-drawing/releases/latest)** (Apple Silicon, macOS 12+).
+- Latest build: **[v1.1.0 — FingerDrawing-1.1.1.zip](https://github.com/Xian2001/finger-drawing/releases/latest)** (Apple Silicon, macOS 12+).
 - The repository holds the source; the prebuilt `.app` and its zip live in the release assets (they are `.gitignore`d on purpose).
 
 To cut a new release:
