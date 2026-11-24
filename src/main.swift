@@ -860,6 +860,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let gestureMenuItem = NSMenuItem()
     private let hotkeyMenuItem = NSMenuItem()
     private let hotkeyClearItem = NSMenuItem()
+    private var presetItems: [NSMenuItem] = []
     private var hotkeyWindow: HotkeyRecorderWindow?
     private var hotkeyBeforeEdit: HotkeyCombo?
     private var hotkeyCommitted = false
@@ -889,7 +890,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         engine.onArmedChange = { [weak self] on in
             guard let self = self else { return }
-            self.detector.isEnabled = on
+            self.syncTriggerState()
             UserDefaults.standard.set(on, forKey: "armed")
             self.refreshUI()
             HUD.shared.flash(on ? "Finger Drawing · 已启用" : "Finger Drawing · 已停用")
@@ -915,6 +916,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             refreshUI()
         }
+        syncTriggerState()
 
         let touchOK = detector.start()
         if !touchOK {
@@ -927,6 +929,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.engine.shutdown()
             self?.detector.stop()
         }
+    }
+
+    /// 触发方式二选一：设了键盘快捷键就停用触控板手势，反之亦然
+    private func syncTriggerState() {
+        let hasHotkey = HotkeyManager.shared.combo != nil
+        detector.isEnabled = engine.isArmed && !hasHotkey
+        AppLog.shared.log("触发方式：\(hasHotkey ? "键盘快捷键 \(HotkeyManager.shared.combo?.display ?? "")，触控板手势已停用" : "触控板手势 \(detector.preset.title)")")
     }
 
     // MARK: 启动事件监听 + 权限
@@ -1006,6 +1015,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.target = self
             item.tag = preset.rawValue
             item.state = (preset == detector.preset) ? .on : .off
+            presetItems.append(item)
             sub.addItem(item)
         }
 
@@ -1043,8 +1053,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             HotkeyManager.shared.unregister()
             UserDefaults.standard.set(-1, forKey: "hotkeyKeyCode")
             AppLog.shared.log("快捷键已清除")
-            HUD.shared.flash("快捷键已清除")
+            HUD.shared.flash("快捷键已清除，已回到触控板手势")
         }
+        syncTriggerState()
         refreshUI()
     }
 
@@ -1100,12 +1111,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func selectGesture(_ sender: NSMenuItem) {
         guard let preset = GesturePreset(rawValue: sender.tag) else { return }
+        // 手势和快捷键只能二选一：选回手势就作废快捷键
+        let hadHotkey = HotkeyManager.shared.combo != nil
+        if hadHotkey {
+            HotkeyManager.shared.unregister()
+            UserDefaults.standard.set(-1, forKey: "hotkeyKeyCode")
+            AppLog.shared.log("切回触控板手势，快捷键已清除")
+        }
         detector.preset = preset
         UserDefaults.standard.set(preset.rawValue, forKey: "gesturePreset")
-        sender.menu?.items.forEach { $0.state = ($0.tag == sender.tag) ? .on : .off }
-        AppLog.shared.log("触发手势改为：\(preset.title)")
+        syncTriggerState()
         refreshUI()
-        HUD.shared.flash("触发手势：\(preset.fingers) 指 \(preset.taps) 击")
+        HUD.shared.flash("触发手势：\(preset.fingers) 指 \(preset.taps) 击\(hadHotkey ? "（快捷键已清除）" : "")")
     }
 
     private func buildStatusItem() {
@@ -1171,13 +1188,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         armMenuItem.state = armed ? .on : .off
         drawMenuItem.title = on ? "关闭画笔模式" : "开启画笔模式"
         drawMenuItem.isEnabled = armed
-        gestureMenuItem.title = "触发手势：\(detector.preset.title)"
+        let combo = HotkeyManager.shared.combo
+        gestureMenuItem.title = combo == nil
+            ? "触发方式：触控板手势（\(detector.preset.title)）"
+            : "触发方式：键盘快捷键 \(combo?.display ?? "")"
 
-        if let combo = HotkeyManager.shared.combo {
+        for item in presetItems {
+            item.state = (combo == nil && item.tag == detector.preset.rawValue) ? .on : .off
+            item.isEnabled = armed
+        }
+
+        if let combo = combo {
             hotkeyMenuItem.title = "键盘快捷键：\(combo.display)（点此修改）"
-            hotkeyClearItem.isEnabled = true
+            hotkeyMenuItem.state = .on
+            hotkeyClearItem.isEnabled = armed
         } else {
             hotkeyMenuItem.title = "键盘快捷键：未设置（点此设置）"
+            hotkeyMenuItem.state = .off
             hotkeyClearItem.isEnabled = false
         }
         hotkeyMenuItem.isEnabled = armed
@@ -1251,10 +1278,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         1. 「触发手势」可以换成你习惯的方式：单指双击（默认）、单指三击、
            两指轻点、三指轻点、四指轻点。选中后会记住，下次启动沿用。
 
-           同一个子菜单里还有「键盘快捷键」：点一下会弹出一个小窗口，
-           在该窗口里按下你想用的组合键（至少含 ⌘ / ⌥ / ⌃ 之一），
-           点「保存」后立即生效并记住；之后在任何应用里按这个组合键
-           都能开关画笔模式。「清除快捷键」可以把它删掉。
+           同一个子菜单里还有「键盘快捷键」。注意：手势和快捷键是二选一，
+           同一时间只有一个在生效——
+           · 设置快捷键后，触控板手势自动停用（不会误触），
+             在任何应用里按这个组合键都能开关画笔模式；
+           · 「清除快捷键」或重新选一个手势，就回到触控板手势模式，
+             快捷键同时被作废。
 
         2. 做出该手势，或按下已设置的快捷键 → 开启「画笔模式」，屏幕顶部会有提示。
         3. 开启后手指在触控板上滑动即可连续画线，不需要按住触控板；

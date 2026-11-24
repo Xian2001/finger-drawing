@@ -22,7 +22,7 @@ Turn your Mac trackpad into a pen. Tap the trackpad with a gesture — and the l
   | Four-finger tap | 4 | 1 |
 
 - **Master switch** in the menu bar: when unchecked, the app does nothing at all — the gesture is ignored and no mouse events are touched.
-- **Optional global keyboard shortcut** — pick any combo (⌘ / ⌥ / ⌃ / ⇧ + key) in the gesture submenu; it toggles drawing mode from any app, and it does not need the Accessibility permission to be registered.
+- **Optional global keyboard shortcut** — pick any combo (⌘ / ⌥ / ⌃ / ⇧ + key) in the gesture submenu; it toggles drawing mode from any app, and it does not need the Accessibility permission to be registered. **The trackpad gesture and the keyboard shortcut are mutually exclusive:** registering a shortcut switches the trackpad gesture off, and choosing a gesture again clears the shortcut.
 - **State is remembered** — the master switch, the chosen gesture and the keyboard shortcut survive relaunches.
 - **No accidental strokes** — a gesture only counts when it is a real tap: short (< 0.3 s), almost no movement, with the required number of fingers landing together (< 0.15 s apart). Pressing, holding or swiping never triggers it.
 
@@ -31,6 +31,8 @@ Turn your Mac trackpad into a pen. Tap the trackpad with a gesture — and the l
 Open the `触发手势` submenu → `键盘快捷键：未设置（点此设置）`. A small window appears: press the combo you want (it must include at least one of ⌘ / ⌥ / ⌃), then click **保存** (or press Return). Esc closes it without changing anything, and `清除快捷键` removes the assignment.
 
 The shortcut is registered through Carbon's `RegisterEventHotKey`, so it works while another app is focused, the key press is swallowed instead of leaking into the focused app, and it needs no Accessibility permission. If macOS or another app already owns the combo, the app tells you and keeps the previous one.
+
+Only one trigger is live at a time. Once a shortcut is saved, the touchpad gesture stops responding (so you cannot trip it by accident); `清除快捷键` or clicking any gesture in the same submenu switches back to the trackpad and retires the shortcut. The menu title always shows which one is currently active: `触发方式：触控板手势（…）` or `触发方式：键盘快捷键 ⌃⌥P`.
 
 ## Menu bar
 
